@@ -35,8 +35,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btn_remove_tag).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Toast.makeText(MainActivity.this, "通过Tag移除Observer" + TAG, Toast.LENGTH_SHORT).show();
-                ZBus.removeObservers(MainActivity.this);
+                Toast.makeText(getApplicationContext(), "通过Tag移除Observer" + TAG, Toast.LENGTH_SHORT).show();
+                ZBus.removeObservers(TAG);
             }
         });
 
@@ -54,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 if (tvText.getParent() != null ) {
-                    Toast.makeText(MainActivity.this, "移除View:" + tvText, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getApplicationContext(), "移除View:" + tvText, Toast.LENGTH_SHORT).show();
                     view.removeView(tvText);
                 }
             }
@@ -74,13 +74,13 @@ public class MainActivity extends AppCompatActivity {
                 .doOnChange(new ZBus.TripleConsumer<String, Boolean, Double>() {
                     @Override
                     public void onAccept(String s, Boolean aBoolean, Double aDouble) {
-                        Toast.makeText(MainActivity.this, "接收到s=" + s + " b=" + aBoolean + " d=" + aDouble, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "接收到s=" + s + " b=" + aBoolean + " d=" + aDouble, Toast.LENGTH_SHORT).show();
                     }
                 })
                 .doOnDetach(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, "triple doOnDetach", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "triple doOnDetach", Toast.LENGTH_SHORT).show();
                     }
                 })
                 .subscribe();
@@ -91,13 +91,13 @@ public class MainActivity extends AppCompatActivity {
                 .doOnChange(new ZBus.SingleConsumer<String>() {
                     @Override
                     public void onAccept(String s) {
-                        Toast.makeText(MainActivity.this, "接收到s=" + s, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "接收到s=" + s, Toast.LENGTH_SHORT).show();
                     }
                 })
                 .doOnDetach(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, "single doOnDetach", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "single doOnDetach", Toast.LENGTH_SHORT).show();
                     }
                 })
                 .subscribe();
@@ -108,13 +108,13 @@ public class MainActivity extends AppCompatActivity {
                 .doOnChange(new ZBus.PairConsumer<String, Boolean>() {
                     @Override
                     public void onAccept(String s, Boolean b) {
-                        Toast.makeText(MainActivity.this, "接收到s=" + s + " b=" + b, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "接收到s=" + s + " b=" + b, Toast.LENGTH_SHORT).show();
                     }
                 })
                 .doOnDetach(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, "pair doOnDetach", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "pair doOnDetach", Toast.LENGTH_SHORT).show();
                     }
                 })
                 .subscribe();
@@ -123,13 +123,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void init() {
-        Toast.makeText(this, "start RxObserver!", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), "start RxObserver!", Toast.LENGTH_SHORT).show();
         btnInit.setVisibility(View.GONE);
         if (tvText.getParent() == null) {
             view.addView(tvText);
         }
 
-        ZBus.observe(this, TAG)
+        ZBus.observeSticky(this, TAG)
                 .bindToLife(this)
                 .bindTag(TAG)
                 .bindView(tvText)
@@ -137,13 +137,13 @@ public class MainActivity extends AppCompatActivity {
                 .doOnAttach(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, "doOnAttach time=" + System.currentTimeMillis(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "doOnAttach time=" + System.currentTimeMillis(), Toast.LENGTH_SHORT).show();
                     }
                 })
                 .doOnChange(new Consumer<String>() {
                     @Override
                     public void accept(String s) {
-                        Toast.makeText(MainActivity.this, "收到信息 time=" + System.currentTimeMillis(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "收到信息 time=" + System.currentTimeMillis(), Toast.LENGTH_SHORT).show();
                         if (tvText.getVisibility() == View.VISIBLE) {
                             tvText.setVisibility(View.GONE);
                         } else {
@@ -154,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
                 .doOnDetach(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, "doOnDetach time=" + System.currentTimeMillis(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "doOnDetach time=" + System.currentTimeMillis(), Toast.LENGTH_SHORT).show();
                         btnInit.setVisibility(View.VISIBLE);
                     }
                 })
@@ -164,7 +164,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        Toast.makeText(this, "onPause", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), "onPause", Toast.LENGTH_SHORT).show();
     }
 
 }

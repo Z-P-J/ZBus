@@ -21,7 +21,6 @@ android {
 
 dependencies {
     implementation('android.arch.lifecycle:common:1.1.1')
-    implementation('android.arch.lifecycle:livedata:1.1.1')
     implementation('android.arch.lifecycle:livedata-core:1.1.1')
 }
 
