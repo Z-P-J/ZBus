@@ -20,8 +20,6 @@ class BusEventObserver<T, C extends Consumer<? super T>>
         implements BusObserver<C>, EventObserver<T>, View.OnAttachStateChangeListener {
 
     @NonNull
-    private final LifecycleOwner owner;
-    @NonNull
     private final EventLiveData<T> liveData;
 //    private Scheduler subscribeScheduler = Schedulers.io();
 //    private Scheduler observeScheduler = AndroidSchedulers.mainThread();
@@ -34,12 +32,11 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     private Runnable onAttach = null;
     private Runnable onDetach = null;
 
-    BusEventObserver(@NonNull LifecycleOwner owner, @NonNull EventLiveData<T> liveData) {
-        this(owner, liveData, null);
+    BusEventObserver(@NonNull EventLiveData<T> liveData) {
+        this(liveData, null);
     }
 
-    BusEventObserver(@NonNull LifecycleOwner owner, @NonNull EventLiveData<T> liveData, String key) {
-        this.owner = owner;
+    BusEventObserver(@NonNull EventLiveData<T> liveData, String key) {
         this.liveData = liveData;
         if (!TextUtils.isEmpty(key)) {
             tagSet.add(key);
@@ -129,7 +126,8 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 //            observeScheduler = AndroidSchedulers.mainThread();
 //        }
 
-        this.liveData.observe(owner, this);
+//        this.liveData.observe(owner, this);
+        this.liveData.observeForever(this);
     }
 
     @Override

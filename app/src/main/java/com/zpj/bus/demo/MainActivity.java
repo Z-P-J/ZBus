@@ -129,10 +129,10 @@ public class MainActivity extends AppCompatActivity {
             view.addView(tvText);
         }
 
-        ZBus.observeSticky(this, TAG)
+        ZBus.with(tvText)
+                .observeSticky(TAG)
                 .bindToLife(this)
                 .bindTag(TAG)
-                .bindView(tvText)
                 .bindToLife(this, Lifecycle.Event.ON_PAUSE)
                 .doOnAttach(new Runnable() {
                     @Override

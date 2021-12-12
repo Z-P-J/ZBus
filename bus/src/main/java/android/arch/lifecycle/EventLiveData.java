@@ -1,31 +1,37 @@
 package android.arch.lifecycle;
 
 import android.annotation.SuppressLint;
-import android.arch.core.executor.ArchTaskExecutor;
 import android.arch.core.internal.SafeIterableMap;
 import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
+import com.zpj.bus.Schedulers;
+
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static android.arch.lifecycle.Lifecycle.State.DESTROYED;
 import static android.arch.lifecycle.Lifecycle.State.STARTED;
 
 @SuppressLint("RestrictedApi")
 public class EventLiveData<T> extends LiveData<T> {
-    private final Object mDataLock = new Object();
-    static final int START_VERSION = -1;
+
+    private static final int START_VERSION = -1;
     private static final Object NOT_SET = new Object();
 
-    private SafeIterableMap<Observer<T>, ObserverWrapper> mObservers =
+    private final Object mDataLock = new Object();
+
+    private final SafeIterableMap<Observer<T>, ObserverWrapper> mObservers =
             new SafeIterableMap<>();
+
+    // how many observers are in active state
+    private final AtomicInteger mActiveCount = new AtomicInteger(0);
 
     private final boolean mIsStickyEvent;
 
-    // how many observers are in active state
-    private int mActiveCount = 0;
+
     private volatile Object mData = NOT_SET;
     // when setData is called, we set the pending data and actual data swap happens on the main
     // thread
@@ -101,83 +107,26 @@ public class EventLiveData<T> extends LiveData<T> {
         mDispatchingValue = false;
     }
 
-    /**
-     * Adds the given observer to the observers list within the lifespan of the given
-     * owner. The events are dispatched on the main thread. If LiveData already has data
-     * set, it will be delivered to the observer.
-     * <p>
-     * The observer will only receive events if the owner is in {@link Lifecycle.State#STARTED}
-     * or {@link Lifecycle.State#RESUMED} state (active).
-     * <p>
-     * If the owner moves to the {@link Lifecycle.State#DESTROYED} state, the observer will
-     * automatically be removed.
-     * <p>
-     * When data changes while the {@code owner} is not active, it will not receive any updates.
-     * If it becomes active again, it will receive the last available data automatically.
-     * <p>
-     * LiveData keeps a strong reference to the observer and the owner as long as the
-     * given LifecycleOwner is not destroyed. When it is destroyed, LiveData removes references to
-     * the observer &amp; the owner.
-     * <p>
-     * If the given owner is already in {@link Lifecycle.State#DESTROYED} state, LiveData
-     * ignores the call.
-     * <p>
-     * If the given owner, observer tuple is already in the list, the call is ignored.
-     * If the observer is already in the list with another owner, LiveData throws an
-     * {@link IllegalArgumentException}.
-     *
-     * @param owner    The LifecycleOwner which controls the observer
-     * @param observer The observer that will receive the events
-     */
-    @MainThread
+    @Override
     public void observe(@NonNull LifecycleOwner owner, @NonNull Observer<T> observer) {
-        if (owner.getLifecycle().getCurrentState() == DESTROYED) {
-            // ignore
-            return;
-        }
-        LifecycleBoundObserver wrapper = new LifecycleBoundObserver(owner, observer);
-        ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
-        if (existing != null && !existing.isAttachedTo(owner)) {
-            throw new IllegalArgumentException("Cannot add the same observer"
-                    + " with different lifecycles");
-        }
-        if (existing != null) {
-
-            if (!mIsStickyEvent) {
-                existing.mLastVersion = mVersion;
-            }
-
-            return;
-        }
-        if (observer instanceof EventObserver) {
-            ((EventObserver<T>) observer).onAttach();
-        }
-        if (!mIsStickyEvent) {
-            wrapper.mLastVersion = mVersion;
-        }
-        owner.getLifecycle().addObserver(wrapper);
+        observeForever(observer);
     }
 
-    /**
-     * Adds the given observer to the observers list. This call is similar to
-     * {@link android.arch.lifecycle.LiveData#observe(LifecycleOwner, Observer)} with a LifecycleOwner, which
-     * is always active. This means that the given observer will receive all events and will never
-     * be automatically removed. You should manually call {@link #removeObserver(Observer)} to stop
-     * observing this LiveData.
-     * While LiveData has one of such observers, it will be considered
-     * as active.
-     * <p>
-     * If the observer was already added with an owner to this LiveData, LiveData throws an
-     * {@link IllegalArgumentException}.
-     *
-     * @param observer The observer that will receive the events
-     */
-    @MainThread
+    @Override
     public void observeForever(@NonNull Observer<T> observer) {
         AlwaysActiveObserver wrapper = new AlwaysActiveObserver(observer);
         ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
         if (existing != null) {
+            if (!mIsStickyEvent) {
+                existing.mLastVersion = mVersion;
+            }
             return;
+        }
+        if (!mIsStickyEvent) {
+            wrapper.mLastVersion = mVersion;
+        }
+        if (observer instanceof EventObserver) {
+            ((EventObserver<T>) observer).onAttach();
         }
         wrapper.activeStateChanged(true);
     }
@@ -230,21 +179,6 @@ public class EventLiveData<T> extends LiveData<T> {
         }
     }
 
-    /**
-     * Posts a task to a main thread to set the given value. So if you have a following code
-     * executed in the main thread:
-     * <pre class="prettyprint">
-     * liveData.postValue("a");
-     * liveData.setValue("b");
-     * </pre>
-     * The value "b" would be set at first and later the main thread would override it with
-     * the value "a".
-     * <p>
-     * If you called this method multiple times before a main thread executed a posted task, only
-     * the last value would be dispatched.
-     *
-     * @param value The new value
-     */
     @Override
     public void postValue(T value) {
         boolean postTask;
@@ -255,18 +189,9 @@ public class EventLiveData<T> extends LiveData<T> {
         if (!postTask) {
             return;
         }
-        ArchTaskExecutor.getInstance().postToMainThread(mPostValueRunnable);
+        Schedulers.main().execute(mPostValueRunnable);
     }
 
-    /**
-     * Sets the value. If there are active observers, the value will be dispatched to them.
-     * <p>
-     * This method must be called from the main thread. If you need set a value from a background
-     * thread, you can use {@link #postValue(Object)}
-     *
-     * @param value The new value
-     */
-    @MainThread
     @Override
     public void setValue(T value) {
         mVersion++;
@@ -291,31 +216,9 @@ public class EventLiveData<T> extends LiveData<T> {
         return null;
     }
 
+    @Override
     int getVersion() {
         return mVersion;
-    }
-
-    /**
-     * Called when the number of active observers change to 1 from 0.
-     * <p>
-     * This callback can be used to know that this LiveData is being used thus should be kept
-     * up to date.
-     */
-    protected void onActive() {
-
-    }
-
-    /**
-     * Called when the number of active observers change from 1 to 0.
-     * <p>
-     * This does not mean that there are no observers left, there may still be observers but their
-     * lifecycle states aren't {@link Lifecycle.State#STARTED} or {@link Lifecycle.State#RESUMED}
-     * (like an Activity in the back stack).
-     * <p>
-     * You can check if there are observers via {@link #hasObservers()}.
-     */
-    protected void onInactive() {
-
     }
 
     /**
@@ -335,41 +238,7 @@ public class EventLiveData<T> extends LiveData<T> {
      */
     @SuppressWarnings("WeakerAccess")
     public boolean hasActiveObservers() {
-        return mActiveCount > 0;
-    }
-
-    @SuppressLint("RestrictedApi")
-    class LifecycleBoundObserver extends ObserverWrapper implements GenericLifecycleObserver {
-        @NonNull final LifecycleOwner mOwner;
-
-        LifecycleBoundObserver(@NonNull LifecycleOwner owner, Observer<T> observer) {
-            super(observer);
-            mOwner = owner;
-        }
-
-        @Override
-        boolean shouldBeActive() {
-            return mOwner.getLifecycle().getCurrentState().isAtLeast(STARTED);
-        }
-
-        @Override
-        public void onStateChanged(LifecycleOwner source, Lifecycle.Event event) {
-            if (mOwner.getLifecycle().getCurrentState() == DESTROYED) {
-                removeObserver(mObserver);
-                return;
-            }
-            activeStateChanged(shouldBeActive());
-        }
-
-        @Override
-        boolean isAttachedTo(LifecycleOwner owner) {
-            return mOwner == owner;
-        }
-
-        @Override
-        void detachObserver() {
-            mOwner.getLifecycle().removeObserver(this);
-        }
+        return mActiveCount.get() > 0;
     }
 
     private abstract class ObserverWrapper {
@@ -397,15 +266,15 @@ public class EventLiveData<T> extends LiveData<T> {
             // immediately set active state, so we'd never dispatch anything to inactive
             // owner
             mActive = newActive;
-            boolean wasInactive = EventLiveData.this.mActiveCount == 0;
-            EventLiveData.this.mActiveCount += mActive ? 1 : -1;
+            boolean wasInactive = EventLiveData.this.mActiveCount.get() == 0;
+            EventLiveData.this.mActiveCount.addAndGet(mActive ? 1 : -1);
             if (wasInactive && mActive) {
                 onActive();
                 if (!mIsStickyEvent) {
                     return;
                 }
             }
-            if (EventLiveData.this.mActiveCount == 0 && !mActive) {
+            if (EventLiveData.this.mActiveCount.get() == 0 && !mActive) {
                 onInactive();
                 return;
             }
