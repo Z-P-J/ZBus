@@ -12,6 +12,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * The event bus by {@link EventLiveData}, which can perception lifecycle and support sticky event.
+ */
 public final class ZBus {
 
     private final Map<Class<?>, EventLiveData<?>> classEventLiveDataMap = new ConcurrentHashMap<>();
@@ -22,7 +25,7 @@ public final class ZBus {
         private static final ZBus INSTANCE = new ZBus();
     }
 
-    static ZBus get() {
+    private static ZBus get() {
         return InstanceHolder.INSTANCE;
     }
 
@@ -545,6 +548,9 @@ public final class ZBus {
 
     }
 
+    /**
+     *  The builder of {@link BusObserver}
+     */
     public static final class BusObserverBuilder {
 
         private LifecycleOwner owner;

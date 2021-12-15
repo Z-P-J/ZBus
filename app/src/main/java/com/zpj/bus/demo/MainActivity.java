@@ -11,6 +11,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.zpj.bus.Consumer;
+import com.zpj.bus.Schedulers;
 import com.zpj.bus.ZBus;
 
 public class MainActivity extends AppCompatActivity {
@@ -131,6 +132,7 @@ public class MainActivity extends AppCompatActivity {
 
         ZBus.with(tvText)
                 .observeSticky(TAG)
+//                .observeOn(Schedulers.io())
                 .bindToLife(this)
                 .bindTag(TAG)
                 .bindToLife(this, Lifecycle.Event.ON_PAUSE)

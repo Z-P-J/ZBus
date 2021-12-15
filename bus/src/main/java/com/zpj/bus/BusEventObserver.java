@@ -16,30 +16,36 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 
+/**
+ * A class which implements the {@link BusObserver} and {@link EventObserver}, .
+ * @param <T> The type of event.
+ * @param <C> The consumer of event.
+ * @author Z-P-J
+ */
 class BusEventObserver<T, C extends Consumer<? super T>>
         implements BusObserver<C>, EventObserver<T>, View.OnAttachStateChangeListener {
 
     @NonNull
-    private final EventLiveData<T> liveData;
+    private final EventLiveData<T> mLiveData;
 //    private Scheduler subscribeScheduler = Schedulers.io();
-//    private Scheduler observeScheduler = AndroidSchedulers.mainThread();
+    private Schedulers.Scheduler mScheduler;
 
-    private final Set<LifecycleBoundObserver> lifecycleBoundObservers = new HashSet<>(0);
-    private final Set<Object> tagSet = new HashSet<>(0);
-    private final WeakHashMap<View, Object> attachViwMap = new WeakHashMap<>();
+    private final Set<LifecycleBoundObserver> mLifecycleObservers = new HashSet<>(0);
+    private final Set<Object> mTags = new HashSet<>(0);
+    private final WeakHashMap<View, Object> mAttachViews = new WeakHashMap<>();
 
-    private C onChange = null;
-    private Runnable onAttach = null;
-    private Runnable onDetach = null;
+    private C mOnChange = null;
+    private Runnable mOnAttach = null;
+    private Runnable mOnDetach = null;
 
     BusEventObserver(@NonNull EventLiveData<T> liveData) {
         this(liveData, null);
     }
 
     BusEventObserver(@NonNull EventLiveData<T> liveData, String key) {
-        this.liveData = liveData;
+        this.mLiveData = liveData;
         if (!TextUtils.isEmpty(key)) {
-            tagSet.add(key);
+            mTags.add(key);
         }
     }
 
@@ -48,12 +54,12 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 //        this.subscribeScheduler = scheduler;
 //        return this;
 //    }
-//
-//    @Override
-//    public IObserver<Consumer<? super T>> observeOn(Scheduler scheduler) {
-//        this.observeScheduler = scheduler;
-//        return this;
-//    }
+
+    @Override
+    public BusObserver<C> observeOn(Schedulers.Scheduler scheduler) {
+        this.mScheduler = scheduler;
+        return this;
+    }
 
     @Override
     public BusObserver<C> bindTag(Object tag) {
@@ -62,16 +68,16 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 
     @Override
     public BusObserver<C> bindTag(Object tag, boolean disposeBefore) {
-        this.tagSet.add(tag);
+        this.mTags.add(tag);
         return this;
     }
 
     @Override
     public BusObserver<C> bindView(View view) {
         if (view != null) {
-            if (!attachViwMap.containsKey(view)) {
+            if (!mAttachViews.containsKey(view)) {
                 view.addOnAttachStateChangeListener(this);
-                attachViwMap.put(view, null);
+                mAttachViews.put(view, null);
             }
         }
         return this;
@@ -85,9 +91,9 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     @Override
     public BusObserver<C> bindToLife(LifecycleOwner lifecycleOwner, Lifecycle.Event event) {
         LifecycleBoundObserver observer = new LifecycleBoundObserver(lifecycleOwner, this, event);
-        synchronized (lifecycleBoundObservers) {
-            if (!lifecycleBoundObservers.contains(observer)) {
-                lifecycleBoundObservers.add(observer);
+        synchronized (mLifecycleObservers) {
+            if (!mLifecycleObservers.contains(observer)) {
+                mLifecycleObservers.add(observer);
                 observer.attach();
             }
         }
@@ -96,19 +102,19 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 
     @Override
     public BusObserver<C> doOnAttach(Runnable onAttach) {
-        this.onAttach = onAttach;
+        this.mOnAttach = onAttach;
         return this;
     }
 
     @Override
     public BusObserver<C> doOnChange(C onChange) {
-        this.onChange = onChange;
+        this.mOnChange = onChange;
         return this;
     }
 
     @Override
     public BusObserver<C> doOnDetach(Runnable onDetach) {
-        this.onDetach = onDetach;
+        this.mOnDetach = onDetach;
         return this;
     }
 
@@ -127,56 +133,61 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 //        }
 
 //        this.liveData.observe(owner, this);
-        this.liveData.observeForever(this);
+        this.mLiveData.observeForever(this);
     }
 
     @Override
     public void onAttach() {
-        if (onAttach != null) {
-            onAttach.run();
+        if (mOnAttach != null) {
+            execute(mOnAttach);
         }
     }
 
     @Override
     public void onDetach() {
-        onAttach = null;
-        onChange = null;
-        synchronized (attachViwMap) {
-            for (View view : attachViwMap.keySet()) {
+        mOnAttach = null;
+        mOnChange = null;
+        synchronized (mAttachViews) {
+            for (View view : mAttachViews.keySet()) {
                 if (view != null) {
                     view.removeOnAttachStateChangeListener(this);
                 }
             }
-            attachViwMap.clear();
+            mAttachViews.clear();
         }
 
-        synchronized (lifecycleBoundObservers) {
-            for (LifecycleBoundObserver observer : lifecycleBoundObservers) {
+        synchronized (mLifecycleObservers) {
+            for (LifecycleBoundObserver observer : mLifecycleObservers) {
                 observer.detach();
             }
-            lifecycleBoundObservers.clear();
+            mLifecycleObservers.clear();
         }
 
-        tagSet.clear();
+        mTags.clear();
 
-        if (onDetach != null) {
-            onDetach.run();
+        if (mOnDetach != null) {
+            execute(mOnDetach);
         }
-        onDetach = null;
+        mOnDetach = null;
 
     }
 
     @Override
     public boolean hasTag(Object tag) {
-        synchronized (tagSet) {
-            return tagSet.contains(tag);
+        synchronized (mTags) {
+            return mTags.contains(tag);
         }
     }
 
     @Override
-    public void onChanged(@Nullable T t) {
-        if (onChange != null) {
-            onChange.accept(t);
+    public void onChanged(@Nullable final T t) {
+        if (mOnChange != null) {
+            execute(new Runnable() {
+                @Override
+                public void run() {
+                    mOnChange.accept(t);
+                }
+            });
         }
     }
 
@@ -187,15 +198,26 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 
     @Override
     public void onViewDetachedFromWindow(View v) {
-        synchronized (attachViwMap) {
-            attachViwMap.remove(v);
+        synchronized (mAttachViews) {
+            mAttachViews.remove(v);
         }
         v.removeOnAttachStateChangeListener(this);
         detach();
     }
 
+    private void execute(Runnable runnable) {
+        if (mScheduler == null) {
+            synchronized (BusEventObserver.this) {
+                if (mScheduler == null) {
+                    mScheduler = Schedulers.main();
+                }
+            }
+        }
+        mScheduler.execute(runnable);
+    }
+
     private void detach() {
-        liveData.removeObserver(this);
+        mLiveData.removeObserver(this);
     }
 
     @SuppressLint("RestrictedApi")

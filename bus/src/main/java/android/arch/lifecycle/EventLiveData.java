@@ -15,6 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static android.arch.lifecycle.Lifecycle.State.DESTROYED;
 import static android.arch.lifecycle.Lifecycle.State.STARTED;
 
+/**
+ * LiveData of event.
+ * @param <T> The type of data held by this instance
+ * @author Z-P-J
+ */
 @SuppressLint("RestrictedApi")
 public class EventLiveData<T> extends LiveData<T> {
 

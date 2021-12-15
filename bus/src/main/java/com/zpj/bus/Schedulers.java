@@ -8,10 +8,21 @@ import android.support.annotation.Nullable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * The container of schedulers
+ * @author Z-P-J
+ */
 public class Schedulers {
 
+    /**
+     * Schedule the event.
+     */
     public interface Scheduler {
 
+        /**
+         * Execute the runnable.
+         * @param runnable
+         */
         void execute(Runnable runnable);
 
     }
@@ -36,6 +47,9 @@ public class Schedulers {
         return IOHolder.IO;
     }
 
+    /**
+     * A {@link Scheduler} of main thread.
+     */
     private static final class MainScheduler implements Scheduler  {
 
         private final Object mLock = new Object();
@@ -63,6 +77,9 @@ public class Schedulers {
 
     }
 
+    /**
+     * A {@link Scheduler} of io thread.
+     */
     private static final class IOScheduler implements Scheduler  {
 
         private final Object mLock = new Object();
