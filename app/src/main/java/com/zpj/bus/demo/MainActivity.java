@@ -131,7 +131,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         ZBus.with(tvText)
-                .observeSticky(TAG)
+                .observe(TAG)
 //                .observeOn(Schedulers.io())
                 .bindToLife(this)
                 .bindTag(TAG)

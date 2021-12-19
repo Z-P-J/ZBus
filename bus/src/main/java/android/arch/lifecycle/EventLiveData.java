@@ -26,38 +26,17 @@ public class EventLiveData<T> extends LiveData<T> {
     private static final int START_VERSION = -1;
     private static final Object NOT_SET = new Object();
 
-    private final Object mDataLock = new Object();
-
     private final SafeIterableMap<Observer<T>, ObserverWrapper> mObservers =
             new SafeIterableMap<>();
 
     // how many observers are in active state
     private final AtomicInteger mActiveCount = new AtomicInteger(0);
 
+    private final AtomicInteger mVersion = new AtomicInteger(START_VERSION);
+
     private final boolean mIsStickyEvent;
 
-
     private volatile Object mData = NOT_SET;
-    // when setData is called, we set the pending data and actual data swap happens on the main
-    // thread
-    private volatile Object mPendingData = NOT_SET;
-    private int mVersion = START_VERSION;
-
-    private boolean mDispatchingValue;
-    @SuppressWarnings("FieldCanBeLocal")
-    private boolean mDispatchInvalidated;
-    private final Runnable mPostValueRunnable = new Runnable() {
-        @Override
-        public void run() {
-            Object newValue;
-            synchronized (mDataLock) {
-                newValue = mPendingData;
-                mPendingData = NOT_SET;
-            }
-            //noinspection unchecked
-            setValue((T) newValue);
-        }
-    };
 
     public EventLiveData(boolean isStickyEvent) {
         this.mIsStickyEvent = isStickyEvent;
@@ -67,73 +46,46 @@ public class EventLiveData<T> extends LiveData<T> {
         return mIsStickyEvent;
     }
 
-    private void considerNotify(ObserverWrapper observer) {
-        if (!observer.mActive) {
-            return;
-        }
-        // Check latest state b4 dispatch. Maybe it changed state but we didn't get the event yet.
-        //
-        // we still first check observer.active to keep it as the entrance for events. So even if
-        // the observer moved to an active state, if we've not received that event, we better not
-        // notify for a more predictable notification order.
-        if (!observer.shouldBeActive()) {
-            observer.activeStateChanged(false);
-            return;
-        }
-        if (observer.mLastVersion >= mVersion) {
-            return;
-        }
-        observer.mLastVersion = mVersion;
-        //noinspection unchecked
-        observer.mObserver.onChanged((T) mData);
+    @Override
+    protected void onActive() {
+
     }
 
-    private void dispatchingValue(@Nullable ObserverWrapper initiator) {
-        if (mDispatchingValue) {
-            mDispatchInvalidated = true;
-            return;
+    @Override
+    protected void onInactive() {
+        if (!mIsStickyEvent) {
+            mData = NOT_SET;
         }
-        mDispatchingValue = true;
-        do {
-            mDispatchInvalidated = false;
-            if (initiator != null) {
-                considerNotify(initiator);
-                initiator = null;
-            } else {
-                for (Iterator<Map.Entry<Observer<T>, ObserverWrapper>> iterator =
-                     mObservers.iteratorWithAdditions(); iterator.hasNext(); ) {
-                    considerNotify(iterator.next().getValue());
-                    if (mDispatchInvalidated) {
-                        break;
-                    }
-                }
-            }
-        } while (mDispatchInvalidated);
-        mDispatchingValue = false;
     }
 
+    @Deprecated
     @Override
     public void observe(@NonNull LifecycleOwner owner, @NonNull Observer<T> observer) {
-        observeForever(observer);
+
     }
 
+    @Deprecated
     @Override
     public void observeForever(@NonNull Observer<T> observer) {
-        AlwaysActiveObserver wrapper = new AlwaysActiveObserver(observer);
-        ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
-        if (existing != null) {
-            if (!mIsStickyEvent) {
-                existing.mLastVersion = mVersion;
+
+    }
+
+    public void observeForever(@NonNull EventObserver<T> observer) {
+        synchronized (mObservers) {
+            ObserverWrapper wrapper = new ObserverWrapper(observer);
+            ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
+            if (existing != null) {
+                if (!mIsStickyEvent) {
+                    existing.updateVersion(mVersion.get());
+                }
+                return;
             }
-            return;
+            if (!mIsStickyEvent) {
+                wrapper.updateVersion(mVersion.get());
+            }
+            observer.onAttach();
+            wrapper.activeStateChanged(true);
         }
-        if (!mIsStickyEvent) {
-            wrapper.mLastVersion = mVersion;
-        }
-        if (observer instanceof EventObserver) {
-            ((EventObserver<T>) observer).onAttach();
-        }
-        wrapper.activeStateChanged(true);
     }
 
     /**
@@ -141,30 +93,35 @@ public class EventLiveData<T> extends LiveData<T> {
      *
      * @param observer The Observer to receive events.
      */
-    @MainThread
     public void removeObserver(@NonNull final Observer<T> observer) {
-        ObserverWrapper removed = mObservers.remove(observer);
-        if (removed == null) {
-            return;
-        }
-        removed.detachObserver();
-        removed.activeStateChanged(false);
-        if (observer instanceof EventObserver) {
-            ((EventObserver<T>) observer).onDetach();
+        synchronized (mObservers) {
+            ObserverWrapper removed = mObservers.remove(observer);
+            if (removed == null) {
+                return;
+            }
+            removed.detachObserver();
+            removed.activeStateChanged(false);
+            if (observer instanceof EventObserver) {
+                ((EventObserver<T>) observer).onDetach();
+            }
         }
     }
 
     public void removeObservers() {
-        for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
-            removeObserver(entry.getKey());
+        synchronized (mObservers) {
+            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
+                removeObserver(entry.getKey());
+            }
         }
     }
 
     public void removeObservers(@NonNull final Object tag) {
-        for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
-            Observer<T> key = entry.getKey();
-            if (key instanceof EventObserver && ((EventObserver<T>) key).hasTag(tag)) {
-                removeObserver(key);
+        synchronized (mObservers) {
+            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
+                Observer<T> key = entry.getKey();
+                if (key instanceof EventObserver && ((EventObserver<T>) key).hasTag(tag)) {
+                    removeObserver(key);
+                }
             }
         }
     }
@@ -174,34 +131,30 @@ public class EventLiveData<T> extends LiveData<T> {
      *
      * @param owner The {@code LifecycleOwner} scope for the observers to be removed.
      */
-    @SuppressWarnings("WeakerAccess")
-    @MainThread
     public void removeObservers(@NonNull final LifecycleOwner owner) {
-        for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
-            if (entry.getValue().isAttachedTo(owner)) {
-                removeObserver(entry.getKey());
+        synchronized (mObservers) {
+            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
+                if (entry.getValue().isAttachedTo(owner)) {
+                    removeObserver(entry.getKey());
+                }
             }
         }
     }
 
     @Override
     public void postValue(T value) {
-        boolean postTask;
-        synchronized (mDataLock) {
-            postTask = mPendingData == NOT_SET;
-            mPendingData = value;
-        }
-        if (!postTask) {
-            return;
-        }
-        Schedulers.main().execute(mPostValueRunnable);
+        setValue(value);
     }
 
     @Override
     public void setValue(T value) {
-        mVersion++;
-        mData = value;
-        dispatchingValue(null);
+        synchronized (mObservers) {
+            int version = mVersion.incrementAndGet();
+            mData = value;
+            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
+                entry.getValue().considerNotify(value, version);
+            }
+        }
     }
 
     /**
@@ -223,7 +176,7 @@ public class EventLiveData<T> extends LiveData<T> {
 
     @Override
     int getVersion() {
-        return mVersion;
+        return mVersion.get();
     }
 
     /**
@@ -246,25 +199,45 @@ public class EventLiveData<T> extends LiveData<T> {
         return mActiveCount.get() > 0;
     }
 
-    private abstract class ObserverWrapper {
-        final Observer<T> mObserver;
-        boolean mActive;
-        int mLastVersion = START_VERSION;
+    private class ObserverWrapper {
+        private final EventObserver<T> mObserver;
+        private volatile boolean mActive;
+        private volatile int mLastVersion = START_VERSION;
 
-        ObserverWrapper(Observer<T> observer) {
+        private ObserverWrapper(EventObserver<T> observer) {
             mObserver = observer;
         }
 
-        abstract boolean shouldBeActive();
+        private void updateVersion(int version) {
+            synchronized (this) {
+                mLastVersion = version;
+            }
+        }
+
+        private boolean compareOrUpdateVersion(int version) {
+            synchronized (this) {
+                if (mLastVersion >= version) {
+                    return false;
+                }
+                mLastVersion = version;
+                return true;
+            }
+        }
+
+        private boolean shouldBeActive() {
+            synchronized (mObserver) {
+                return mObserver.isActive();
+            }
+        }
 
         boolean isAttachedTo(LifecycleOwner owner) {
             return false;
         }
 
-        void detachObserver() {
+        private synchronized void detachObserver() {
         }
 
-        void activeStateChanged(boolean newActive) {
+        private synchronized void activeStateChanged(boolean newActive) {
             if (newActive == mActive) {
                 return;
             }
@@ -284,21 +257,30 @@ public class EventLiveData<T> extends LiveData<T> {
                 return;
             }
             if (mActive) {
-                dispatchingValue(this);
+                considerNotify(mData, mVersion.get());
             }
         }
-    }
 
-    private class AlwaysActiveObserver extends ObserverWrapper {
 
-        AlwaysActiveObserver(Observer<T> observer) {
-            super(observer);
+        private synchronized void considerNotify(Object data, int version) {
+            if (!mActive) {
+                return;
+            }
+            // Check latest state b4 dispatch. Maybe it changed state but we didn't get the event yet.
+            //
+            // we still first check observer.active to keep it as the entrance for events. So even if
+            // the observer moved to an active state, if we've not received that event, we better not
+            // notify for a more predictable notification order.
+            if (!shouldBeActive()) {
+                activeStateChanged(false);
+                return;
+            }
+            if (compareOrUpdateVersion(version)) {
+                // noinspection unchecked
+                mObserver.onChanged((T) data);
+            }
         }
 
-        @Override
-        boolean shouldBeActive() {
-            return true;
-        }
     }
 
 }

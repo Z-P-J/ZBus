@@ -24,4 +24,10 @@ public interface EventObserver<T> extends Observer<T> {
      */
     boolean hasTag(final Object tag);
 
+    /**
+     * Whether the event observer is activated.
+     * @return active
+     */
+    boolean isActive();
+
 }

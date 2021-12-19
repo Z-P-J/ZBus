@@ -180,6 +180,11 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     }
 
     @Override
+    public boolean isActive() {
+        return true;
+    }
+
+    @Override
     public void onChanged(@Nullable final T t) {
         if (mOnChange != null) {
             execute(new Runnable() {
