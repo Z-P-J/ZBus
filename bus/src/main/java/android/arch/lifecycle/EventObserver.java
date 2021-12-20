@@ -19,10 +19,10 @@ public interface EventObserver<T> extends Observer<T> {
 
     /**
      * Call this when {@link EventLiveData#removeObservers(Object)}
-     * @param tag A tag of observer.
-     * @return The {@link EventObserver} whether binding the tag.
+     * @param o The object which binds to this observer
+     * @return The {@link EventObserver} whether binding the object.
      */
-    boolean hasTag(final Object tag);
+    boolean isBindTo(final Object o);
 
     /**
      * Whether the event observer is activated.

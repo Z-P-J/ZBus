@@ -1,33 +1,23 @@
 package android.arch.lifecycle;
 
-import android.annotation.SuppressLint;
-import android.arch.core.internal.SafeIterableMap;
-import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
-import com.zpj.bus.Schedulers;
-
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static android.arch.lifecycle.Lifecycle.State.DESTROYED;
-import static android.arch.lifecycle.Lifecycle.State.STARTED;
 
 /**
  * LiveData of event.
  * @param <T> The type of data held by this instance
  * @author Z-P-J
  */
-@SuppressLint("RestrictedApi")
-public class EventLiveData<T> extends LiveData<T> {
+public class EventLiveData<T> {
 
     private static final int START_VERSION = -1;
     private static final Object NOT_SET = new Object();
 
-    private final SafeIterableMap<Observer<T>, ObserverWrapper> mObservers =
-            new SafeIterableMap<>();
+    private final Map<EventObserver<T>, ObserverWrapper> mObservers = new HashMap<>();
 
     // how many observers are in active state
     private final AtomicInteger mActiveCount = new AtomicInteger(0);
@@ -46,35 +36,24 @@ public class EventLiveData<T> extends LiveData<T> {
         return mIsStickyEvent;
     }
 
-    @Override
     protected void onActive() {
 
     }
 
-    @Override
     protected void onInactive() {
         if (!mIsStickyEvent) {
             mData = NOT_SET;
         }
     }
 
-    @Deprecated
-    @Override
-    public void observe(@NonNull LifecycleOwner owner, @NonNull Observer<T> observer) {
-
-    }
-
-    @Deprecated
-    @Override
-    public void observeForever(@NonNull Observer<T> observer) {
-
-    }
-
     public void observeForever(@NonNull EventObserver<T> observer) {
         synchronized (mObservers) {
             ObserverWrapper wrapper = new ObserverWrapper(observer);
-            ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
-            if (existing != null) {
+//            ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
+            ObserverWrapper existing = mObservers.get(observer);
+            if (existing == null) {
+                mObservers.put(observer, wrapper);
+            } else {
                 if (!mIsStickyEvent) {
                     existing.updateVersion(mVersion.get());
                 }
@@ -93,7 +72,7 @@ public class EventLiveData<T> extends LiveData<T> {
      *
      * @param observer The Observer to receive events.
      */
-    public void removeObserver(@NonNull final Observer<T> observer) {
+    public void removeObserver(@NonNull final EventObserver<T> observer) {
         synchronized (mObservers) {
             ObserverWrapper removed = mObservers.remove(observer);
             if (removed == null) {
@@ -101,15 +80,13 @@ public class EventLiveData<T> extends LiveData<T> {
             }
             removed.detachObserver();
             removed.activeStateChanged(false);
-            if (observer instanceof EventObserver) {
-                ((EventObserver<T>) observer).onDetach();
-            }
+            observer.onDetach();
         }
     }
 
     public void removeObservers() {
         synchronized (mObservers) {
-            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
+            for (Map.Entry<EventObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
                 removeObserver(entry.getKey());
             }
         }
@@ -117,41 +94,20 @@ public class EventLiveData<T> extends LiveData<T> {
 
     public void removeObservers(@NonNull final Object tag) {
         synchronized (mObservers) {
-            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
-                Observer<T> key = entry.getKey();
-                if (key instanceof EventObserver && ((EventObserver<T>) key).hasTag(tag)) {
+            for (Map.Entry<EventObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
+                EventObserver<T> key = entry.getKey();
+                if (key.isBindTo(tag)) {
                     removeObserver(key);
                 }
             }
         }
     }
 
-    /**
-     * Removes all observers that are tied to the given {@link LifecycleOwner}.
-     *
-     * @param owner The {@code LifecycleOwner} scope for the observers to be removed.
-     */
-    public void removeObservers(@NonNull final LifecycleOwner owner) {
-        synchronized (mObservers) {
-            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
-                if (entry.getValue().isAttachedTo(owner)) {
-                    removeObserver(entry.getKey());
-                }
-            }
-        }
-    }
-
-    @Override
     public void postValue(T value) {
-        setValue(value);
-    }
-
-    @Override
-    public void setValue(T value) {
         synchronized (mObservers) {
             int version = mVersion.incrementAndGet();
             mData = value;
-            for (Map.Entry<Observer<T>, ObserverWrapper> entry : mObservers) {
+            for (Map.Entry<EventObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
                 entry.getValue().considerNotify(value, version);
             }
         }
@@ -174,19 +130,15 @@ public class EventLiveData<T> extends LiveData<T> {
         return null;
     }
 
-    @Override
-    int getVersion() {
-        return mVersion.get();
-    }
-
     /**
      * Returns true if this LiveData has observers.
      *
      * @return true if this LiveData has observers
      */
-    @SuppressWarnings("WeakerAccess")
     public boolean hasObservers() {
-        return mObservers.size() > 0;
+        synchronized (mObservers) {
+            return mObservers.size() > 0;
+        }
     }
 
     /**
@@ -194,7 +146,6 @@ public class EventLiveData<T> extends LiveData<T> {
      *
      * @return true if this LiveData has active observers
      */
-    @SuppressWarnings("WeakerAccess")
     public boolean hasActiveObservers() {
         return mActiveCount.get() > 0;
     }
@@ -228,10 +179,6 @@ public class EventLiveData<T> extends LiveData<T> {
             synchronized (mObserver) {
                 return mObserver.isActive();
             }
-        }
-
-        boolean isAttachedTo(LifecycleOwner owner) {
-            return false;
         }
 
         private synchronized void detachObserver() {

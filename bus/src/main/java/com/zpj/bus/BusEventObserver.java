@@ -173,10 +173,27 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     }
 
     @Override
-    public boolean hasTag(Object tag) {
+    public boolean isBindTo(Object o) {
         synchronized (mTags) {
-            return mTags.contains(tag);
+            if (mTags.contains(o)) {
+                return true;
+            }
         }
+        if (o instanceof LifecycleOwner) {
+            LifecycleOwner owner = (LifecycleOwner) o;
+            synchronized (mLifecycleObservers) {
+                for (LifecycleBoundObserver observer : mLifecycleObservers) {
+                    if (observer.mOwner == owner) {
+                        return true;
+                    }
+                }
+            }
+        } else if (o instanceof View) {
+            synchronized (mAttachViews) {
+                return mAttachViews.containsKey(o);
+            }
+        }
+        return false;
     }
 
     @Override

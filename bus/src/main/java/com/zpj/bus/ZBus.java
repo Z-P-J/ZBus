@@ -2,12 +2,12 @@ package com.zpj.bus;
 
 import android.arch.lifecycle.EventLiveData;
 import android.arch.lifecycle.LifecycleOwner;
-import android.arch.lifecycle.Observer;
 import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.view.View;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,59 +17,43 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ZBus {
 
-    private final Map<Class<?>, EventLiveData<?>> classEventLiveDataMap = new ConcurrentHashMap<>();
-    private final Map<String, EventLiveData<String>> keyEventLiveDataMap = new ConcurrentHashMap<>();
-    private final Map<MultiKey, EventLiveData<MultiEvent>> multiEventLiveDataMap = new ConcurrentHashMap<>();
-
-    private static final class InstanceHolder {
-        private static final ZBus INSTANCE = new ZBus();
+    private static final class CommonBusHolder {
+        private static final CommonEventBus BUS = new CommonEventBus();
     }
 
-    private static ZBus get() {
-        return InstanceHolder.INSTANCE;
+    private static final class StickyBusHolder {
+        private static final StickyEventBus BUS = new StickyEventBus();
     }
 
     private ZBus() {
+        throw new UnsupportedOperationException();
+    }
 
+    @Deprecated
+    public static BusObserverBuilder with() {
+        return new BusObserverBuilder();
+    }
+
+    @Deprecated
+    public static BusObserverBuilder with(Object tag) {
+        return new BusObserverBuilder(tag);
+    }
+
+    public static BusObserverBuilder with(LifecycleOwner owner) {
+        return new BusObserverBuilder(owner);
+    }
+
+    public static BusObserverBuilder with(View view) {
+        return new BusObserverBuilder(view);
     }
 
     //---------------------------------------------------------------post Event-----------------------------------------------------------
 
     private static void post(Object o, boolean isSticky) {
-        EventLiveData liveData = null;
-        if (o instanceof MultiEvent) {
-            MultiKey key = get().findMultiKey(((MultiEvent) o).getKey(), ((MultiEvent) o).getObjects());
-            if (key != null) {
-                liveData = get().multiEventLiveDataMap.get(key);
-            }
-            if (liveData == null && isSticky) {
-                if (key == null) {
-                    key = ((MultiEvent) o).createMultiKey();
-                }
-                EventLiveData<MultiEvent> data = new EventLiveData<>(isSticky);
-                get().multiEventLiveDataMap.put(key, data);
-                data.setValue((MultiEvent) o);
-                return;
-            }
-        } else if (o instanceof String) {
-            liveData = get().keyEventLiveDataMap.get(o);
-            if (liveData == null && isSticky) {
-                EventLiveData<String> data = new EventLiveData<>(isSticky);
-                get().keyEventLiveDataMap.put((String) o, data);
-                data.setValue((String) o);
-                return;
-            }
-        } else if (o != null) {
-            liveData = get().classEventLiveDataMap.get(o.getClass());
-            if (liveData == null && isSticky) {
-                EventLiveData data = new EventLiveData(isSticky);
-                get().classEventLiveDataMap.put(o.getClass(), data);
-                data.setValue(o);
-                return;
-            }
-        }
-        if (liveData != null) {
-            liveData.postValue(o);
+        if (isSticky) {
+            StickyBusHolder.BUS.post(o);
+        } else {
+            CommonBusHolder.BUS.post(o);
         }
     }
 
@@ -183,24 +167,6 @@ public final class ZBus {
         Schedulers.getMainHandler().postDelayed(action, delay);
     }
 
-    @Deprecated
-    public static BusObserverBuilder with() {
-        return new BusObserverBuilder();
-    }
-
-    @Deprecated
-    public static BusObserverBuilder with(Object tag) {
-        return new BusObserverBuilder(tag);
-    }
-
-    public static BusObserverBuilder with(LifecycleOwner owner) {
-        return new BusObserverBuilder(owner);
-    }
-
-    public static BusObserverBuilder with(View view) {
-        return new BusObserverBuilder(view);
-    }
-
 
     //--------------------------------------------------------------Observer-------------------------------------------------------------
 
@@ -230,69 +196,6 @@ public final class ZBus {
                                                                                                  @NonNull Class<T> type3) {
         return with(o).observe(key, type1, type2, type3);
     }
-
-    private <T> EventLiveData<T> getLiveData(final Class<T> type, boolean isSticky) {
-        EventLiveData<?> liveData = classEventLiveDataMap.get(type);
-        if (liveData == null) {
-            liveData = new EventLiveData<>(isSticky);
-            classEventLiveDataMap.put(type, liveData);
-        }
-        return (EventLiveData<T>) liveData;
-    }
-
-    private EventLiveData<String> getLiveData(final String key, boolean isSticky) {
-        EventLiveData<String> liveData = keyEventLiveDataMap.get(key);
-        if (liveData == null) {
-            liveData = new EventLiveData<>(isSticky);
-            keyEventLiveDataMap.put(key, liveData);
-        }
-        return liveData;
-    }
-
-    private EventLiveData<MultiEvent> getLiveData(final String key, boolean isStickyEvent, final Class<?>...types) {
-        MultiKey multiKey = findMultiKey(key, types);
-        if (multiKey == null) {
-            multiKey = new MultiKey(key, types);
-            EventLiveData<MultiEvent> liveData = new EventLiveData<>(isStickyEvent);
-            multiEventLiveDataMap.put(multiKey, liveData);
-            return liveData;
-        } else {
-            return multiEventLiveDataMap.get(multiKey);
-        }
-    }
-
-    private MultiKey findMultiKey(final String key, final Object...objects) {
-        for (MultiKey multiKey : multiEventLiveDataMap.keySet()) {
-            boolean isSameKey = TextUtils.equals(multiKey.getKey(), key)
-                    && multiKey.getClasses().length == objects.length;
-            if (isSameKey) {
-                for (int i = 0; i < objects.length; i++) {
-                    isSameKey = multiKey.getClassAt(i).isInstance(objects[i]);
-                    if (!isSameKey) {
-                        break;
-                    }
-                }
-                if (isSameKey) {
-                    return multiKey;
-                }
-            }
-        }
-        return null;
-    }
-
-    private MultiKey findMultiKey(final String key, final Class<?>...types) {
-        for (MultiKey multiKey : multiEventLiveDataMap.keySet()) {
-            if (TextUtils.equals(multiKey.getKey(), key)
-                    && multiKey.getClasses().length == types.length
-                    && Arrays.equals(multiKey.getClasses(), types)) {
-                return multiKey;
-            }
-        }
-        return null;
-    }
-
-
-    //------------------------------------------------------------------Sticky Event相关-----------------------------------------------------
 
     public static <T> BusObserver<Consumer<? super T>> observeSticky(@NonNull LifecycleOwner o,
                                                                      @NonNull Class<T> type) {
@@ -326,119 +229,318 @@ public final class ZBus {
     }
 
     public static <T> T removeStickyEvent(Class<T> eventType) {
-        synchronized (get().classEventLiveDataMap) {
-            EventLiveData<?> liveData = get().classEventLiveDataMap.remove(eventType);
-            if (liveData == null) {
-                return null;
-            }
-            return eventType.cast(liveData.getValue());
-        }
+        return StickyBusHolder.BUS.removeStickyEvent(eventType);
     }
 
     public static Object removeStickyEvent(String key) {
-        synchronized (get().keyEventLiveDataMap) {
-            EventLiveData<?> liveData = get().keyEventLiveDataMap.remove(key);
-            if (liveData == null || !liveData.isStickyEvent()) {
-                return null;
-            }
-            return liveData.getValue();
-        }
+        return StickyBusHolder.BUS.removeStickyEvent(key);
     }
 
     public static <T> T removeStickyEvent(String key, Class<T> type) {
-        synchronized (get().multiEventLiveDataMap) {
-            MultiKey multiKey = new MultiKey(key, type);
-            EventLiveData<MultiEvent> liveData = get().multiEventLiveDataMap.remove(multiKey);
-            if (liveData == null || !liveData.isStickyEvent() || liveData.getValue().getObjects().length != 1) {
-                return null;
-            }
-            return type.cast(liveData.getValue().getObjectAt(0));
-        }
+        return StickyBusHolder.BUS.removeStickyEvent(key, type);
     }
 
     public static void removeAllStickyEvents() {
-        synchronized (get()) {
-            for (Map.Entry<Class<?>, EventLiveData<?>> entry : get().classEventLiveDataMap.entrySet()) {
-                if (entry.getValue() != null && entry.getValue().isStickyEvent()) {
-                    get().classEventLiveDataMap.remove(entry.getKey());
-                }
-            }
-            for (Map.Entry<String, EventLiveData<String>> entry : get().keyEventLiveDataMap.entrySet()) {
-                if (entry.getValue() != null && entry.getValue().isStickyEvent()) {
-                    get().keyEventLiveDataMap.remove(entry.getKey());
-                }
-            }
-            for (Map.Entry<MultiKey, EventLiveData<MultiEvent>> entry : get().multiEventLiveDataMap.entrySet()) {
-                if (entry.getValue() != null && entry.getValue().isStickyEvent()) {
-                    get().multiEventLiveDataMap.remove(entry.getKey());
-                }
-            }
-        }
+        StickyBusHolder.BUS.removeAllStickyEvents();
     }
 
     public static <T> T getStickyEvent(Class<T> event) {
-        synchronized (get().classEventLiveDataMap) {
-            EventLiveData<?> liveData = get().classEventLiveDataMap.get(event);
-            if (liveData == null || !liveData.isStickyEvent()) {
-                return null;
-            }
-            return event.cast(liveData.getValue());
-        }
+        return StickyBusHolder.BUS.getStickyEvent(event);
     }
 
     public static Object getStickyEvent(String key) {
-        synchronized (get().keyEventLiveDataMap) {
-            EventLiveData<?> liveData = get().keyEventLiveDataMap.get(key);
-            if (liveData == null || !liveData.isStickyEvent()) {
-                return null;
-            }
-            return liveData.getValue();
-        }
+        return StickyBusHolder.BUS.getStickyEvent(key);
     }
 
     public static <T> T getStickyEvent(String key, Class<T> type) {
-        synchronized (get().multiEventLiveDataMap) {
-            MultiKey multiKey = new MultiKey(key, type);
-            EventLiveData<MultiEvent> liveData = get().multiEventLiveDataMap.get(multiKey);
-            if (liveData == null || !liveData.isStickyEvent() || liveData.getValue().getObjects().length != 1) {
-                return null;
-            }
-            return type.cast(liveData.getValue().getObjectAt(0));
-        }
+        return StickyBusHolder.BUS.getStickyEvent(key, type);
     }
 
 
     //---------------------------------------------------------------其他-----------------------------------------------------------------
 
     public static void removeObservers(Object o) {
-        if (o == null) {
-            return;
-        }
-        if (o instanceof String) {
-            EventLiveData<String> liveData = get().keyEventLiveDataMap.remove(o);
-            if (liveData != null) {
-                liveData.removeObservers();
-            }
-        }
-        for (EventLiveData<?> liveData : get().keyEventLiveDataMap.values()) {
-            if (liveData != null) {
-                liveData.removeObservers(o);
+        CommonBusHolder.BUS.removeObservers(o);
+        StickyBusHolder.BUS.removeObservers(o);
+    }
+
+    private abstract static class EventBus {
+        protected final Map<Class<?>, EventLiveData<?>> classEventLiveDataMap = new HashMap<>();
+        protected final Map<String, EventLiveData<String>> keyEventLiveDataMap = new HashMap<>();
+        protected final Map<MultiKey, EventLiveData<MultiEvent>> multiEventLiveDataMap = new HashMap<>();
+
+        protected abstract void post(Object o);
+
+        protected <T> EventLiveData<T> getLiveData(final Class<T> type, boolean isSticky) {
+            synchronized (classEventLiveDataMap) {
+                EventLiveData<?> liveData = classEventLiveDataMap.get(type);
+                if (liveData == null) {
+                    liveData = new EventLiveData<>(isSticky);
+                    classEventLiveDataMap.put(type, liveData);
+                }
+                return (EventLiveData<T>) liveData;
             }
         }
 
-        for (EventLiveData<?> liveData : get().classEventLiveDataMap.values()) {
-            if (liveData != null) {
-                liveData.removeObservers(o);
+        protected EventLiveData<String> getLiveData(final String key, boolean isSticky) {
+            synchronized (keyEventLiveDataMap) {
+                EventLiveData<String> liveData = keyEventLiveDataMap.get(key);
+                if (liveData == null) {
+                    liveData = new EventLiveData<>(isSticky);
+                    keyEventLiveDataMap.put(key, liveData);
+                }
+                return liveData;
             }
         }
 
-        for (EventLiveData<?> liveData : get().multiEventLiveDataMap.values()) {
+        protected EventLiveData<MultiEvent> getLiveData(final String key, boolean isStickyEvent, final Class<?>...types) {
+            synchronized (multiEventLiveDataMap) {
+                MultiKey multiKey = findMultiKey(key, types);
+                if (multiKey == null) {
+                    multiKey = new MultiKey(key, types);
+                    EventLiveData<MultiEvent> liveData = new EventLiveData<>(isStickyEvent);
+                    multiEventLiveDataMap.put(multiKey, liveData);
+                    return liveData;
+                } else {
+                    return multiEventLiveDataMap.get(multiKey);
+                }
+            }
+        }
+
+        protected MultiKey findMultiKey(final String key, final Object...objects) {
+            synchronized (multiEventLiveDataMap) {
+                for (MultiKey multiKey : multiEventLiveDataMap.keySet()) {
+                    boolean isSameKey = TextUtils.equals(multiKey.getKey(), key)
+                            && multiKey.getClasses().length == objects.length;
+                    if (isSameKey) {
+                        for (int i = 0; i < objects.length; i++) {
+                            isSameKey = multiKey.getClassAt(i).isInstance(objects[i]);
+                            if (!isSameKey) {
+                                break;
+                            }
+                        }
+                        if (isSameKey) {
+                            return multiKey;
+                        }
+                    }
+                }
+                return null;
+            }
+        }
+
+        protected MultiKey findMultiKey(final String key, final Class<?>...types) {
+            synchronized (multiEventLiveDataMap) {
+                for (MultiKey multiKey : multiEventLiveDataMap.keySet()) {
+                    if (TextUtils.equals(multiKey.getKey(), key)
+                            && multiKey.getClasses().length == types.length
+                            && Arrays.equals(multiKey.getClasses(), types)) {
+                        return multiKey;
+                    }
+                }
+                return null;
+            }
+        }
+
+        public synchronized void removeObservers(Object o) {
+            if (o == null) {
+                return;
+            }
+            synchronized (keyEventLiveDataMap) {
+                if (o instanceof String) {
+                    EventLiveData<String> liveData = keyEventLiveDataMap.remove(o);
+                    if (liveData != null) {
+                        liveData.removeObservers();
+                    }
+                }
+                for (EventLiveData<?> liveData : keyEventLiveDataMap.values()) {
+                    if (liveData != null) {
+                        liveData.removeObservers(o);
+                    }
+                }
+            }
+
+            synchronized (classEventLiveDataMap) {
+                for (EventLiveData<?> liveData : classEventLiveDataMap.values()) {
+                    if (liveData != null) {
+                        liveData.removeObservers(o);
+                    }
+                }
+            }
+
+            synchronized (multiEventLiveDataMap) {
+                for (EventLiveData<?> liveData : multiEventLiveDataMap.values()) {
+                    if (liveData != null) {
+                        liveData.removeObservers(o);
+                    }
+                }
+            }
+
+        }
+
+    }
+
+    private static final class CommonEventBus extends EventBus {
+
+        @Override
+        protected void post(Object o) {
+            EventLiveData liveData = null;
+            if (o instanceof MultiEvent) {
+                synchronized (multiEventLiveDataMap) {
+                    MultiKey key = findMultiKey(((MultiEvent) o).getKey(), ((MultiEvent) o).getObjects());
+                    if (key != null) {
+                        liveData = multiEventLiveDataMap.get(key);
+                    }
+                }
+            } else if (o instanceof String) {
+                synchronized (keyEventLiveDataMap) {
+                    liveData = keyEventLiveDataMap.get(o);
+                }
+            } else if (o != null) {
+                synchronized (classEventLiveDataMap) {
+                    liveData = classEventLiveDataMap.get(o.getClass());
+                }
+            }
             if (liveData != null) {
-                liveData.removeObservers(o);
+                liveData.postValue(o);
             }
         }
     }
 
+    private static final class StickyEventBus extends EventBus {
+
+        @Override
+        protected void post(Object o) {
+            EventLiveData liveData = null;
+            if (o instanceof MultiEvent) {
+                synchronized (multiEventLiveDataMap) {
+                    MultiKey key = findMultiKey(((MultiEvent) o).getKey(), ((MultiEvent) o).getObjects());
+                    if (key != null) {
+                        liveData = multiEventLiveDataMap.get(key);
+                    }
+                    if (liveData == null) {
+                        if (key == null) {
+                            key = ((MultiEvent) o).createMultiKey();
+                        }
+                        EventLiveData<MultiEvent> data = new EventLiveData<>(true);
+                        multiEventLiveDataMap.put(key, data);
+                        data.postValue((MultiEvent) o);
+                        return;
+                    }
+                }
+            } else if (o instanceof String) {
+                synchronized (keyEventLiveDataMap) {
+                    liveData = keyEventLiveDataMap.get(o);
+                    if (liveData == null) {
+                        EventLiveData<String> data = new EventLiveData<>(true);
+                        keyEventLiveDataMap.put((String) o, data);
+                        data.postValue((String) o);
+                        return;
+                    }
+                }
+            } else if (o != null) {
+                synchronized (classEventLiveDataMap) {
+                    liveData = classEventLiveDataMap.get(o.getClass());
+                    if (liveData == null) {
+                        EventLiveData data = new EventLiveData(true);
+                        classEventLiveDataMap.put(o.getClass(), data);
+                        data.postValue(o);
+                        return;
+                    }
+                }
+            }
+            if (liveData != null) {
+                liveData.postValue(o);
+            }
+        }
+
+        public <T> T removeStickyEvent(Class<T> eventType) {
+            synchronized (classEventLiveDataMap) {
+                EventLiveData<?> liveData = classEventLiveDataMap.remove(eventType);
+                if (liveData == null) {
+                    return null;
+                }
+                return eventType.cast(liveData.getValue());
+            }
+        }
+
+        public Object removeStickyEvent(String key) {
+            synchronized (keyEventLiveDataMap) {
+                EventLiveData<?> liveData = keyEventLiveDataMap.remove(key);
+                if (liveData == null || !liveData.isStickyEvent()) {
+                    return null;
+                }
+                return liveData.getValue();
+            }
+        }
+
+        public <T> T removeStickyEvent(String key, Class<T> type) {
+            synchronized (multiEventLiveDataMap) {
+                MultiKey multiKey = new MultiKey(key, type);
+                EventLiveData<MultiEvent> liveData = multiEventLiveDataMap.remove(multiKey);
+                if (liveData == null || !liveData.isStickyEvent() || liveData.getValue().getObjects().length != 1) {
+                    return null;
+                }
+                return type.cast(liveData.getValue().getObjectAt(0));
+            }
+        }
+
+        public void removeAllStickyEvents() {
+            synchronized (classEventLiveDataMap) {
+                for (Map.Entry<Class<?>, EventLiveData<?>> entry : classEventLiveDataMap.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue().isStickyEvent()) {
+                        classEventLiveDataMap.remove(entry.getKey());
+                    }
+                }
+            }
+            synchronized (keyEventLiveDataMap) {
+                for (Map.Entry<String, EventLiveData<String>> entry : keyEventLiveDataMap.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue().isStickyEvent()) {
+                        keyEventLiveDataMap.remove(entry.getKey());
+                    }
+                }
+            }
+
+            synchronized (multiEventLiveDataMap) {
+                for (Map.Entry<MultiKey, EventLiveData<MultiEvent>> entry : multiEventLiveDataMap.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue().isStickyEvent()) {
+                        multiEventLiveDataMap.remove(entry.getKey());
+                    }
+                }
+            }
+        }
+
+        public <T> T getStickyEvent(Class<T> event) {
+            synchronized (classEventLiveDataMap) {
+                EventLiveData<?> liveData = classEventLiveDataMap.get(event);
+                if (liveData == null || !liveData.isStickyEvent()) {
+                    return null;
+                }
+                return event.cast(liveData.getValue());
+            }
+        }
+
+        public Object getStickyEvent(String key) {
+            synchronized (keyEventLiveDataMap) {
+                EventLiveData<?> liveData = keyEventLiveDataMap.get(key);
+                if (liveData == null || !liveData.isStickyEvent()) {
+                    return null;
+                }
+                return liveData.getValue();
+            }
+        }
+
+        public <T> T getStickyEvent(String key, Class<T> type) {
+            synchronized (multiEventLiveDataMap) {
+                MultiKey multiKey = new MultiKey(key, type);
+                EventLiveData<MultiEvent> liveData = multiEventLiveDataMap.get(multiKey);
+                if (liveData == null || !liveData.isStickyEvent() || liveData.getValue().getObjects().length != 1) {
+                    return null;
+                }
+                return type.cast(liveData.getValue().getObjectAt(0));
+            }
+        }
+
+    }
 
     //---------------------------------------------------------------Consumer-------------------------------------------------------------
 
@@ -594,16 +696,16 @@ public final class ZBus {
         }
 
         public <T> BusObserver<Consumer<? super T>> observe(@NonNull Class<T> type) {
-            return wrapObserver(new BusEventObserver<>(get().getLiveData(type, false)));
+            return wrapObserver(new BusEventObserver<>(CommonBusHolder.BUS.getLiveData(type, false)));
         }
 
         public BusObserver<Consumer<? super String>> observe(@NonNull String key) {
-            return wrapObserver(new BusEventObserver<>(get().getLiveData(key, false)));
+            return wrapObserver(new BusEventObserver<>(CommonBusHolder.BUS.getLiveData(key, false)));
         }
 
         public <T> BusObserver<SingleConsumer<? super T>> observe(@NonNull String key, @NonNull Class<T> type) {
             BusObserver<SingleConsumer<? super T>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, false, type), key);
+                    = new BusEventObserver<>(CommonBusHolder.BUS.getLiveData(key, false, type), key);
             wrapObserver(observer);
             return observer;
         }
@@ -612,7 +714,7 @@ public final class ZBus {
                                                                               @NonNull Class<S> type1,
                                                                               @NonNull Class<T> type2) {
             BusObserver<PairConsumer<? super S, ? super T>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, false, type1, type2), key);
+                    = new BusEventObserver<>(CommonBusHolder.BUS.getLiveData(key, false, type1, type2), key);
             wrapObserver(observer);
             return observer;
         }
@@ -622,21 +724,21 @@ public final class ZBus {
                                                                                               @NonNull Class<P> type2,
                                                                                               @NonNull Class<Q> type3) {
             BusObserver<TripleConsumer<? super O, ? super P, ? super Q>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, false, type1, type2, type3), key);
+                    = new BusEventObserver<>(CommonBusHolder.BUS.getLiveData(key, false, type1, type2, type3), key);
             wrapObserver(observer);
             return observer;
         }
 
         public <T> BusObserver<Consumer<? super T>> observeSticky(@NonNull Class<T> type) {
             BusEventObserver<T, Consumer<? super T>> observer
-                    = new BusEventObserver<>(get().getLiveData(type, true));
+                    = new BusEventObserver<>(StickyBusHolder.BUS.getLiveData(type, true));
             wrapObserver(observer);
             return observer;
         }
 
         public BusObserver<Consumer<? super String>> observeSticky(@NonNull String key) {
             BusEventObserver<String, Consumer<? super String>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, true));
+                    = new BusEventObserver<>(StickyBusHolder.BUS.getLiveData(key, true));
             wrapObserver(observer);
             return observer;
         }
@@ -644,7 +746,7 @@ public final class ZBus {
         public <T> BusObserver<SingleConsumer<? super T>> observeSticky(@NonNull String key,
                                                                         @NonNull Class<T> type) {
             BusEventObserver<MultiEvent, SingleConsumer<? super T>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, true, type), key);
+                    = new BusEventObserver<>(StickyBusHolder.BUS.getLiveData(key, true, type), key);
             wrapObserver(observer);
             return observer;
         }
@@ -653,7 +755,7 @@ public final class ZBus {
                                                                     @NonNull Class<S> type1,
                                                                     @NonNull Class<T> type2) {
             BusEventObserver<MultiEvent, PairConsumer<S, T>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, true, type1, type2), key);
+                    = new BusEventObserver<>(StickyBusHolder.BUS.getLiveData(key, true, type1, type2), key);
             wrapObserver(observer);
             return observer;
         }
@@ -663,7 +765,7 @@ public final class ZBus {
                                                                             @NonNull Class<P> type2,
                                                                             @NonNull Class<Q> type3) {
             BusEventObserver<MultiEvent, TripleConsumer<O, P, Q>> observer
-                    = new BusEventObserver<>(get().getLiveData(key, true, type1, type2, type3), key);
+                    = new BusEventObserver<>(StickyBusHolder.BUS.getLiveData(key, true, type1, type2, type3), key);
             wrapObserver(observer);
             return observer;
         }
