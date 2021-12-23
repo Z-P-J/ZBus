@@ -2,13 +2,13 @@
 
 [![](https://img.shields.io/badge/platform-android-brightgreen.svg)](https://developer.android.com/index.html) [![API](https://img.shields.io/badge/API-19+-blue.svg?style=flat-square)](https://developer.android.com/about/versions/android-4.0.html)[![License](http://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](http://www.apache.org/licenses/LICENSE-2.0)
 
-#### Event Bus By LiveData. 使用LiveData实现的事件发布/订阅框架,支持生命周期管理，支持Sticky Event，替代EventBus。
+#### A Light Event Bus For Android. 轻量级事件发布/订阅框架，支持生命周期感知，支持粘性事件，支持绑定TAG，支持绑定View，可传递多个参数。
 
-## 一、安装
+## 一、安装（TODO 发布库到jitpack）
 
-#### Latest Version：[![Download](https://api.bintray.com/packages/z-p-j/maven/ZBus/images/download.svg?version-1.0.0)](https://bintray.com/z-p-j/maven/ZBus/1.0.0/link)
+#### Latest Version：1.0.0
 ```groovy
-    implementation 'com.zpj.bus:ZBus:1.0.0'
+    implementation 'com.github.Z-P-J:ZBus:1.0.0'
 
 ```
 ## 二、使用（[查看 demo](https://github.com/Z-P-J/ZBus/tree/master/app)）
@@ -17,10 +17,11 @@
 
 ```java
     // 订阅自定义的Event类型事件
-    ZBus.observe(object, Event.class)
+    ZBus.with(LifecycleOwner)
+        .observe(Event.class)
         .bindTag("TAG") // 绑定TAG，可根据该TAG移除订阅
         .bindView(tvText) // 绑定View，当View销毁时自动取消订阅
-        .bindToLife(this, Lifecycle.Event.ON_PAUSE) // 绑定Activity/Fragment生命周期
+        .bindLifecycle(Owner, Lifecycle.Event.ON_PAUSE) // 绑定Activity/Fragment生命周期
         .doOnAttach(new Runnable() {
             @Override
             public void run() {
@@ -49,7 +50,8 @@
 
 ```java
     // 订阅Key事件
-    ZBus.observe(lifecycleOwner, "Key")
+    ZBus.with(lifecycleOwner)
+        .observe("Key")
         .doOnChange(new Consumer<String>() {
             @Override
             public void accept(String s) throws Exception {
@@ -66,7 +68,8 @@
 
 ```java
     // 订阅者1：订阅Key1和Boolean类型事件
-    ZBus.observe(lifecycleOwner, "Key1", Boolean.class)
+    ZBus.with(lifecycleOwner)
+        .observe("Key1", Boolean.class)
         .doOnChange(new SingleConsumer<Boolean>() {
             @Override
             public void onAccept(Boolean event) throws Exception {
@@ -76,7 +79,8 @@
         .subscribe();
 
     // 订阅者2：订阅Key2和Boolean类型事件
-    ZBus.observe(lifecycleOwner, "Key2", Boolean.class)
+    ZBus.with(lifecycleOwner)
+        .observe("Key2", Boolean.class)
         .doOnChange(new SingleConsumer<Boolean>() {
             @Override
             public void onAccept(Boolean event) throws Exception {
@@ -86,7 +90,8 @@
         .subscribe();
 
     // 订阅者3：订阅Key1和Integer类型事件
-    ZBus.observe(lifecycleOwner, "Key1", Integer.class)
+    ZBus.with(lifecycleOwner)
+        .observe("Key1", Integer.class)
         .doOnChange(new SingleConsumer<Integer>() {
             @Override
             public void onAccept(Integer event) throws Exception {
@@ -105,7 +110,8 @@
 
 ```java
     // 当我们要同时传送两个参数时我们无需自定义新的Event类，可直接使用以下方法
-    ZBus.observe(lifecycleOwner, "Key", Boolean.class, Integer.class)
+    ZBus.with(lifecycleOwner)
+        .observe("Key", Boolean.class, Integer.class)
         .doOnChange(new ZBus.PairConsumer<Boolean, Integer>() {
             @Override
             public void onAccept(Boolean b, Integer i) {
@@ -118,7 +124,8 @@
     ZBus.post("Key", true, 100);
 
 	// 当我们要同时传送三个参数时我们无需自定义新的Event类，可直接使用以下方法
-    ZBus.observe(lifecycleOwner, "Key", String.class, Boolean.class, Double.class)
+    ZBus.with(lifecycleOwner)
+        .observe("Key", String.class, Boolean.class, Double.class)
         .doOnChange(new ZBus.TripleConsumer<String, Boolean, Integer>() {
             @Override
             public void onAccept(String s, Boolean b, Double d) {
@@ -134,7 +141,7 @@
 	ZBus.post("Key", "msg", false, 100);
 ```
 
-### 5. Sticky Event
+### 5. 粘性事件(Sticky Event)
 
 ```java
     /*
@@ -142,7 +149,8 @@
     */
 
     // 订阅Sticky事件
-    ZBus.observeSticky(...)
+    ZBus.withSticky()
+        .observe(...)
 
     // 发送Sticky事件
     ZBus.postSticky(...);
@@ -159,7 +167,7 @@
 	ZBus.removeAllStickyEvents();
 ```
 
-### 6. 生命周期管理
+### 6. ZBus生命周期
 
 ```java
     /*
@@ -167,25 +175,29 @@
     */
 
     // 订阅者1
-    ZBus.observe(object1, "Key1", Event1.class)
+    ZBus.with(object1)
+        .observe("Key1", Event1.class)
         .bindTag("TAG1") // 绑定TAG，可根据该TAG移除订阅
         .bindView(bindView) // 绑定View，当View销毁时自动取消订阅
-        .bindToLife(this, Lifecycle.Event.ON_PAUSE) // 绑定Activity/Fragment的onPause生命周期
-        .bindToLife(this) // 绑定Activity/Fragment生命周期，默认为onDestroy时移除取消订阅
+        .bindLifecycle(this, Lifecycle.Event.ON_PAUSE) // 绑定Activity / Fragment的onPause生命周期
+        .bindLifecycle(this) // 绑定Activity / Fragment生命周期，默认为onDestroy时移除取消订阅
         .subscribe();
 
     // 订阅者2
-    ZBus.observe(object1, "Key2", Event1.class)
+    ZBus.wtih(object1)
+        .observe("Key2", Event1.class)
         .bindTag("TAG2")
         .subscribe();
 
     // 订阅者3
-    ZBus.observe(object1, "Key1", Event2.class)
+    ZBus.with(object1)
+        .observe("Key1", Event2.class)
         .bindTag("TAG3")
         .subscribe();
 
     // 订阅者4
-    ZBus.observe(object2, "Key1", Event2.class)
+    ZBus.with(object2)
+        .observe("Key1", Event2.class)
         .bindTag("TAG3")
         .subscribe();
 

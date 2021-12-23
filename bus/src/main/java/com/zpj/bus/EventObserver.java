@@ -9,7 +9,7 @@ import android.view.View;
  * @param <T> The type of consumer.
  * @author Z-P-J
  */
-public interface BusObserver<T> {
+public interface EventObserver<T> {
 
 //    IObserver<T> subscribeOn(Scheduler scheduler);
 
@@ -18,14 +18,14 @@ public interface BusObserver<T> {
      * @param scheduler
      * @return
      */
-    BusObserver<T> observeOn(Schedulers.Scheduler scheduler);
+    EventObserver<T> observeOn(Schedulers.Scheduler scheduler);
 
     /**
      * Bind the tag.
      * @param tag The tag of observer.
      * @return this
      */
-    BusObserver<T> bindTag(Object tag);
+    EventObserver<T> bindTag(Object tag);
 
     /**
      * Bind the tag.
@@ -33,21 +33,21 @@ public interface BusObserver<T> {
      * @param disposeBefore Remove the previous observers which bind the {@param tag}
      * @return this
      */
-    BusObserver<T> bindTag(Object tag, boolean disposeBefore);
+    EventObserver<T> bindTag(Object tag, boolean disposeBefore);
 
     /**
      * Bind the view.
      * @param view A View
      * @return this
      */
-    BusObserver<T> bindView(View view);
+    EventObserver<T> bindView(View view);
 
     /**
      *
      * @param lifecycleOwner
      * @return this
      */
-    BusObserver<T> bindToLife(LifecycleOwner lifecycleOwner);
+    EventObserver<T> bindLifecycle(LifecycleOwner lifecycleOwner);
 
     /**
      *
@@ -55,28 +55,28 @@ public interface BusObserver<T> {
      * @param event
      * @return this
      */
-    BusObserver<T> bindToLife(LifecycleOwner lifecycleOwner, Lifecycle.Event event);
-
-    /**
-     *
-     * @param onAttach
-     * @return this
-     */
-    BusObserver<T> doOnAttach(final Runnable onAttach);
+    EventObserver<T> bindLifecycle(LifecycleOwner lifecycleOwner, Lifecycle.Event event);
 
     /**
      *
      * @param onChange
      * @return this
      */
-    BusObserver<T> doOnChange(final T onChange);
+    EventObserver<T> doOnChange(final T onChange);
+
+    /**
+     *
+     * @param onAttach
+     * @return this
+     */
+    EventObserver<T> doOnAttach(final Runnable onAttach);
 
     /**
      *
      * @param onDetach
      * @return this
      */
-    BusObserver<T> doOnDetach(final Runnable onDetach);
+    EventObserver<T> doOnDetach(final Runnable onDetach);
 
     /**
      * Subscribe the observer of event.

@@ -1,8 +1,6 @@
 package com.zpj.bus;
 
 import android.annotation.SuppressLint;
-import android.arch.lifecycle.EventLiveData;
-import android.arch.lifecycle.EventObserver;
 import android.arch.lifecycle.GenericLifecycleObserver;
 import android.arch.lifecycle.Lifecycle;
 import android.arch.lifecycle.LifecycleOwner;
@@ -17,17 +15,16 @@ import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
- * A class which implements the {@link BusObserver} and {@link EventObserver}, .
+ * A class which implements the {@link EventObserver} and {@link EventLiveData.LiveDataObserver}, .
  * @param <T> The type of event.
  * @param <C> The consumer of event.
  * @author Z-P-J
  */
-class BusEventObserver<T, C extends Consumer<? super T>>
-        implements BusObserver<C>, EventObserver<T>, View.OnAttachStateChangeListener {
+class EventObserverImpl<T, C extends Consumer<? super T>>
+        implements EventObserver<C>, EventLiveData.LiveDataObserver<T>, View.OnAttachStateChangeListener {
 
     @NonNull
     private final EventLiveData<T> mLiveData;
-//    private Scheduler subscribeScheduler = Schedulers.io();
     private Schedulers.Scheduler mScheduler;
 
     private final Set<LifecycleBoundObserver> mLifecycleObservers = new HashSet<>(0);
@@ -38,42 +35,36 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     private Runnable mOnAttach = null;
     private Runnable mOnDetach = null;
 
-    BusEventObserver(@NonNull EventLiveData<T> liveData) {
+    EventObserverImpl(@NonNull EventLiveData<T> liveData) {
         this(liveData, null);
     }
 
-    BusEventObserver(@NonNull EventLiveData<T> liveData, String key) {
+    EventObserverImpl(@NonNull EventLiveData<T> liveData, String key) {
         this.mLiveData = liveData;
         if (!TextUtils.isEmpty(key)) {
             mTags.add(key);
         }
     }
 
-//    @Override
-//    public IObserver<Consumer<? super T>> subscribeOn(Scheduler scheduler) {
-//        this.subscribeScheduler = scheduler;
-//        return this;
-//    }
-
     @Override
-    public BusObserver<C> observeOn(Schedulers.Scheduler scheduler) {
+    public EventObserver<C> observeOn(Schedulers.Scheduler scheduler) {
         this.mScheduler = scheduler;
         return this;
     }
 
     @Override
-    public BusObserver<C> bindTag(Object tag) {
+    public EventObserver<C> bindTag(Object tag) {
         return bindTag(tag, false);
     }
 
     @Override
-    public BusObserver<C> bindTag(Object tag, boolean disposeBefore) {
+    public EventObserver<C> bindTag(Object tag, boolean disposeBefore) {
         this.mTags.add(tag);
         return this;
     }
 
     @Override
-    public BusObserver<C> bindView(View view) {
+    public EventObserver<C> bindView(View view) {
         if (view != null) {
             if (!mAttachViews.containsKey(view)) {
                 view.addOnAttachStateChangeListener(this);
@@ -84,12 +75,12 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     }
 
     @Override
-    public BusObserver<C> bindToLife(LifecycleOwner lifecycleOwner) {
-        return bindToLife(lifecycleOwner, Lifecycle.Event.ON_DESTROY);
+    public EventObserver<C> bindLifecycle(LifecycleOwner lifecycleOwner) {
+        return bindLifecycle(lifecycleOwner, Lifecycle.Event.ON_DESTROY);
     }
 
     @Override
-    public BusObserver<C> bindToLife(LifecycleOwner lifecycleOwner, Lifecycle.Event event) {
+    public EventObserver<C> bindLifecycle(LifecycleOwner lifecycleOwner, Lifecycle.Event event) {
         LifecycleBoundObserver observer = new LifecycleBoundObserver(lifecycleOwner, this, event);
         synchronized (mLifecycleObservers) {
             if (!mLifecycleObservers.contains(observer)) {
@@ -101,19 +92,19 @@ class BusEventObserver<T, C extends Consumer<? super T>>
     }
 
     @Override
-    public BusObserver<C> doOnAttach(Runnable onAttach) {
-        this.mOnAttach = onAttach;
-        return this;
-    }
-
-    @Override
-    public BusObserver<C> doOnChange(C onChange) {
+    public EventObserver<C> doOnChange(C onChange) {
         this.mOnChange = onChange;
         return this;
     }
 
     @Override
-    public BusObserver<C> doOnDetach(Runnable onDetach) {
+    public EventObserver<C> doOnAttach(Runnable onAttach) {
+        this.mOnAttach = onAttach;
+        return this;
+    }
+
+    @Override
+    public EventObserver<C> doOnDetach(Runnable onDetach) {
         this.mOnDetach = onDetach;
         return this;
     }
@@ -125,15 +116,7 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 
     @Override
     public void subscribe() {
-//        if (subscribeScheduler == null) {
-//            subscribeScheduler = Schedulers.io();
-//        }
-//        if (observeScheduler == null) {
-//            observeScheduler = AndroidSchedulers.mainThread();
-//        }
-
-//        this.liveData.observe(owner, this);
-        this.mLiveData.observeForever(this);
+        this.mLiveData.observe(this);
     }
 
     @Override
@@ -229,7 +212,7 @@ class BusEventObserver<T, C extends Consumer<? super T>>
 
     private void execute(Runnable runnable) {
         if (mScheduler == null) {
-            synchronized (BusEventObserver.this) {
+            synchronized (EventObserverImpl.this) {
                 if (mScheduler == null) {
                     mScheduler = Schedulers.main();
                 }
@@ -249,12 +232,12 @@ class BusEventObserver<T, C extends Consumer<? super T>>
         private final LifecycleOwner mOwner;
 
         @NonNull
-        private final BusEventObserver<?, ?> mObserver;
+        private final EventObserverImpl<?, ?> mObserver;
 
         @NonNull
         private final Lifecycle.Event mEvent;
 
-        public LifecycleBoundObserver(@NonNull LifecycleOwner mOwner, @NonNull BusEventObserver<?, ?> mObserver, @NonNull Lifecycle.Event mEvent) {
+        public LifecycleBoundObserver(@NonNull LifecycleOwner mOwner, @NonNull EventObserverImpl<?, ?> mObserver, @NonNull Lifecycle.Event mEvent) {
             this.mOwner = mOwner;
             this.mObserver = mObserver;
             this.mEvent = mEvent;

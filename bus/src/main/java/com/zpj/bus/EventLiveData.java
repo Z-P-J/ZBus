@@ -1,4 +1,4 @@
-package android.arch.lifecycle;
+package com.zpj.bus;
 
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -17,7 +17,7 @@ public class EventLiveData<T> {
     private static final int START_VERSION = -1;
     private static final Object NOT_SET = new Object();
 
-    private final Map<EventObserver<T>, ObserverWrapper> mObservers = new HashMap<>();
+    private final Map<LiveDataObserver<T>, ObserverWrapper> mObservers = new HashMap<>();
 
     // how many observers are in active state
     private final AtomicInteger mActiveCount = new AtomicInteger(0);
@@ -46,10 +46,9 @@ public class EventLiveData<T> {
         }
     }
 
-    public void observeForever(@NonNull EventObserver<T> observer) {
+    public void observe(@NonNull LiveDataObserver<T> observer) {
         synchronized (mObservers) {
             ObserverWrapper wrapper = new ObserverWrapper(observer);
-//            ObserverWrapper existing = mObservers.putIfAbsent(observer, wrapper);
             ObserverWrapper existing = mObservers.get(observer);
             if (existing == null) {
                 mObservers.put(observer, wrapper);
@@ -72,7 +71,7 @@ public class EventLiveData<T> {
      *
      * @param observer The Observer to receive events.
      */
-    public void removeObserver(@NonNull final EventObserver<T> observer) {
+    public void removeObserver(@NonNull final LiveDataObserver<T> observer) {
         synchronized (mObservers) {
             ObserverWrapper removed = mObservers.remove(observer);
             if (removed == null) {
@@ -86,7 +85,7 @@ public class EventLiveData<T> {
 
     public void removeObservers() {
         synchronized (mObservers) {
-            for (Map.Entry<EventObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
+            for (Map.Entry<LiveDataObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
                 removeObserver(entry.getKey());
             }
         }
@@ -94,8 +93,8 @@ public class EventLiveData<T> {
 
     public void removeObservers(@NonNull final Object tag) {
         synchronized (mObservers) {
-            for (Map.Entry<EventObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
-                EventObserver<T> key = entry.getKey();
+            for (Map.Entry<LiveDataObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
+                LiveDataObserver<T> key = entry.getKey();
                 if (key.isBindTo(tag)) {
                     removeObserver(key);
                 }
@@ -107,7 +106,7 @@ public class EventLiveData<T> {
         synchronized (mObservers) {
             int version = mVersion.incrementAndGet();
             mData = value;
-            for (Map.Entry<EventObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
+            for (Map.Entry<LiveDataObserver<T>, ObserverWrapper> entry : mObservers.entrySet()) {
                 entry.getValue().considerNotify(value, version);
             }
         }
@@ -151,11 +150,11 @@ public class EventLiveData<T> {
     }
 
     private class ObserverWrapper {
-        private final EventObserver<T> mObserver;
+        private final LiveDataObserver<T> mObserver;
         private volatile boolean mActive;
         private volatile int mLastVersion = START_VERSION;
 
-        private ObserverWrapper(EventObserver<T> observer) {
+        private ObserverWrapper(LiveDataObserver<T> observer) {
             mObserver = observer;
         }
 
@@ -227,6 +226,44 @@ public class EventLiveData<T> {
                 mObserver.onChanged((T) data);
             }
         }
+
+    }
+
+    /**
+     * A simple callback that can receive from {@link EventLiveData}.
+     * @param <T> The type of the parameter
+     * @author Z-P-J
+     */
+    public interface LiveDataObserver<T> {
+
+        /**
+         * Called when the data is changed.
+         * @param t  The new data
+         */
+        void onChanged(@Nullable T t);
+
+        /**
+         * On attach the observer.
+         */
+        void onAttach();
+
+        /**
+         * On detach the observer.
+         */
+        void onDetach();
+
+        /**
+         * Call this when {@link EventLiveData#removeObservers(Object)}
+         * @param o The object which binds to this observer
+         * @return The {@link LiveDataObserver} whether binding the object.
+         */
+        boolean isBindTo(final Object o);
+
+        /**
+         * Whether the event observer is activated.
+         * @return active
+         */
+        boolean isActive();
 
     }
 

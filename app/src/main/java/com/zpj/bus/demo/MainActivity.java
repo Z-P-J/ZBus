@@ -11,7 +11,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.zpj.bus.Consumer;
-import com.zpj.bus.Schedulers;
 import com.zpj.bus.ZBus;
 
 public class MainActivity extends AppCompatActivity {
@@ -69,9 +68,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        ZBus.observe(this, TAG, String.class, Boolean.class, Double.class)
-                .bindToLife(this)
-                .bindToLife(this, Lifecycle.Event.ON_PAUSE)
+        ZBus.with(this)
+                .observe(TAG, String.class, Boolean.class, Double.class)
+                .bindLifecycle(this)
+                .bindLifecycle(this, Lifecycle.Event.ON_PAUSE)
                 .doOnChange(new ZBus.TripleConsumer<String, Boolean, Double>() {
                     @Override
                     public void onAccept(String s, Boolean aBoolean, Double aDouble) {
@@ -86,9 +86,10 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .subscribe();
 
-        ZBus.observe(this, TAG, String.class)
-                .bindToLife(this)
-                .bindToLife(this, Lifecycle.Event.ON_PAUSE)
+        ZBus.with(this)
+                .observe(TAG, String.class)
+                .bindLifecycle(this)
+                .bindLifecycle(this, Lifecycle.Event.ON_PAUSE)
                 .doOnChange(new ZBus.SingleConsumer<String>() {
                     @Override
                     public void onAccept(String s) {
@@ -103,9 +104,10 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .subscribe();
 
-        ZBus.observe(this, TAG, String.class, Boolean.class)
-                .bindToLife(this)
-                .bindToLife(this, Lifecycle.Event.ON_PAUSE)
+        ZBus.with(this)
+                .observe(TAG, String.class, Boolean.class)
+                .bindLifecycle(this)
+                .bindLifecycle(this, Lifecycle.Event.ON_PAUSE)
                 .doOnChange(new ZBus.PairConsumer<String, Boolean>() {
                     @Override
                     public void onAccept(String s, Boolean b) {
@@ -130,12 +132,12 @@ public class MainActivity extends AppCompatActivity {
             view.addView(tvText);
         }
 
-        ZBus.with(tvText)
+        ZBus.withSticky(tvText)
                 .observe(TAG)
 //                .observeOn(Schedulers.io())
-                .bindToLife(this)
+                .bindLifecycle(this)
                 .bindTag(TAG)
-                .bindToLife(this, Lifecycle.Event.ON_PAUSE)
+                .bindLifecycle(this, Lifecycle.Event.ON_PAUSE)
                 .doOnAttach(new Runnable() {
                     @Override
                     public void run() {
