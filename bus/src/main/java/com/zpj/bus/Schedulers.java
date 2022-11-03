@@ -2,17 +2,23 @@ package com.zpj.bus;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The container of schedulers
  * @author Z-P-J
  */
 public class Schedulers {
+
+    private static final int CPU_COUNT = Runtime.getRuntime().availableProcessors();
 
     /**
      * Schedule the event.
@@ -36,7 +42,7 @@ public class Schedulers {
     }
 
     public static Handler getMainHandler() {
-        return MainHolder.MAIN.getMainHandler();
+        return MainHolder.MAIN.mMainHandler;
     }
 
     public static Scheduler main() {
@@ -52,27 +58,11 @@ public class Schedulers {
      */
     private static final class MainScheduler implements Scheduler  {
 
-        private final Object mLock = new Object();
-
-        @Nullable
-        private volatile Handler mMainHandler;
-
+        private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
         @Override
         public void execute(Runnable runnable) {
-            getMainHandler().post(runnable);
-        }
-
-        @NonNull
-        private Handler getMainHandler() {
-            if (mMainHandler == null) {
-                synchronized (mLock) {
-                    if (mMainHandler == null) {
-                        mMainHandler = new Handler(Looper.getMainLooper());
-                    }
-                }
-            }
-            return mMainHandler;
+            mMainHandler.post(runnable);
         }
 
     }
@@ -82,21 +72,22 @@ public class Schedulers {
      */
     private static final class IOScheduler implements Scheduler  {
 
-        private final Object mLock = new Object();
-
-        @Nullable
-        private ExecutorService mDiskIO ;
+        private static final int THREAD_COUNT = 2 * CPU_COUNT + 1;
+        private static final ThreadPoolExecutor IO_EXECUTOR = new ThreadPoolExecutor(
+                THREAD_COUNT, THREAD_COUNT,
+                0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(),
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        return new Thread(r, "IOThreadPool");
+                    }
+                }
+        );
 
         @Override
         public void execute(Runnable runnable) {
-            if (mDiskIO == null) {
-                synchronized (mLock) {
-                    if (mDiskIO == null) {
-                        mDiskIO = Executors.newFixedThreadPool(2);
-                    }
-                }
-            }
-            mDiskIO.execute(runnable);
+            IO_EXECUTOR.execute(runnable);
         }
     }
 

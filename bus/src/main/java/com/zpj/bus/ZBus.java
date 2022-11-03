@@ -1,7 +1,7 @@
 package com.zpj.bus;
 
-import android.arch.lifecycle.LifecycleOwner;
-import android.support.annotation.NonNull;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.annotation.NonNull;
 import android.text.TextUtils;
 import android.view.View;
 

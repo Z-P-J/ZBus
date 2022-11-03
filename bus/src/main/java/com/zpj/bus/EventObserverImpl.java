@@ -1,11 +1,11 @@
 package com.zpj.bus;
 
 import android.annotation.SuppressLint;
-import android.arch.lifecycle.GenericLifecycleObserver;
-import android.arch.lifecycle.Lifecycle;
-import android.arch.lifecycle.LifecycleOwner;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.lifecycle.GenericLifecycleObserver;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.View;
 
@@ -25,7 +25,7 @@ class EventObserverImpl<T, C extends Consumer<? super T>>
 
     @NonNull
     private final EventLiveData<T> mLiveData;
-    private Schedulers.Scheduler mScheduler;
+    private volatile Schedulers.Scheduler mScheduler;
 
     private final Set<LifecycleBoundObserver> mLifecycleObservers = new HashSet<>(0);
     private final Set<Object> mTags = new HashSet<>(0);
